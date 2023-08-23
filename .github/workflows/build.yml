@@ -61,8 +61,8 @@ jobs:
         run: |
           sed -i 's/v0.0.0/${{ env.REPO_BRANCH }}/g' ./Makefile
           sed -i 's/CHANNEL = development/CHANNEL = release/g' ./Makefile
-          sed -i 's/Host: "static.adtidy.org",/Host: "github.com",/g' ./internal/updater/updater.go
-          sed -i 's/Path: path.Join("adguardhome", conf.Channel, "version.json"),/Path: path.Join("archiveduser", "adguardhome-build", "raw", "main", "version.json"),/g' ./internal/updater/updater.go
+          sed -i 's/Host: "static.adtidy.org",/Host: "cdn.jsdelivr.net",/g' ./internal/updater/updater.go
+          sed -i 's/Path: path.Join("adguardhome", conf.Channel, "version.json"),/Path: path.Join("gh", "archiveduser", "adguardhome-build@main", "version.json"),/g' ./internal/updater/updater.go
           sed -i 's/Name:    "TikTok",/Name:    "ByteDance",/g' ./internal/filtering/servicelist.go
           sed -i 's/"||tiktokv.com^",/"||tiktokv.com^",\n\t\t"||kstv.aisee.tv^",\n\t\t"||bytedance.net^",\n\t\t"||ixigua.com^",\n\t\t"||ksapisrv.com^",\n\t\t"||kuaishou.com^",\n\t\t"||kuaishoupay.com^",\n\t\t"||kuaishouzt.com^",\n\t\t"||kwaicdn.com^",\n\t\t"||kwaizt.com^",\n\t\t"||toutiao.com^",/g' ./internal/filtering/servicelist.go
       - name: Set up Go
@@ -101,7 +101,7 @@ jobs:
       - name: Run After Build
         id: run_after_build
         run: |
-          sed -i 's/https:\/\/static.adtidy.org\/adguardhome\/development\//https:\/\/github.com\/archiveduser\/adguardhome-build\/releases\/download\/${{ env.REPO_BRANCH }}\//g' ./dist/version.json
+          sed -i 's/https:\/\/static.adtidy.org\/adguardhome\/development\//https:\/\/cdn.jsdelivr.net\/gh\/archiveduser\/adguardhome-build@${{ env.REPO_BRANCH }}\//g' ./dist/version.json
           echo "version_file_content=$(cat ./dist/version.json | base64 -w 0)" >> $GITHUB_OUTPUT
       - name: Create Release
         uses: softprops/action-gh-release@v1
