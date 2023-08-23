@@ -1,0 +1,133 @@
+name: build
+
+env:
+  GO_VERSION: 1.20.7
+  NODE_VERSION: "14"
+
+on:
+  workflow_dispatch: null
+  schedule:
+    - cron: "0 6,18 * * *"
+
+jobs:
+  check-update:
+    outputs:
+      local_version: ${{ steps.get_local_version.outputs.value }}
+      remote_version: ${{ steps.get_remote_version.outputs.value }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Get Local Version
+        id: get_local_version
+        uses: ActionsTools/read-json-action@main
+        with:
+          file_path: "version.json"
+          prop_path: "version"
+      - name: Download Remote Version
+        run: wget -O /tmp/remote_version.json https://static.adtidy.org/adguardhome/release/version.json
+      - name: Get Remote Version
+        id: get_remote_version
+        uses: ActionsTools/read-json-action@main
+        with:
+          file_path: "/tmp/remote_version.json"
+          prop_path: "version"
+      - name: Show Version
+        run: |
+          echo "Local Version: ${{steps.get_local_version.outputs.value}}"
+          echo "Remote Version: ${{steps.get_remote_version.outputs.value}}"
+
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: check-update
+    if: needs.check-update.outputs.local_version != needs.check-update.outputs.remote_version
+    env:
+      REPO_BRANCH: ${{ needs.check-update.outputs.remote_version }}
+    outputs:
+      version_file_content: ${{ steps.run_after_build.outputs.version_file_content }}
+      version: ${{ env.REPO_BRANCH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          repository: AdguardTeam/AdGuardHome
+          ref: "${{ env.REPO_BRANCH }}"
+          fetch-depth: 0
+      - name: Run Before Build
+        env:
+          BUILD_VERSION: ${{ env.REPO_BRANCH }}
+        run: |
+          sed -i 's/v0.0.0/${{ env.REPO_BRANCH }}/g' ./Makefile
+          sed -i 's/Host: "static.adtidy.org",/Host: "github.com",/g' ./internal/updater/updater.go
+          sed -i 's/Path: path.Join("adguardhome", conf.Channel, "version.json"),/Path: path.Join("archiveduser", "adguardhome-build", "raw", "main", "version.json"),/g' ./internal/updater/updater.go
+          sed -i 's/Name:    "TikTok",/Name:    "ByteDance",/g' ./internal/filtering/servicelist.go
+          sed -i 's/"||tiktokv.com^",/"||tiktokv.com^",\n\t\t"||kstv.aisee.tv^",\n\t\t"||bytedance.net^",\n\t\t"||ixigua.com^",\n\t\t"||ksapisrv.com^",\n\t\t"||kuaishou.com^",\n\t\t"||kuaishoupay.com^",\n\t\t"||kuaishouzt.com^",\n\t\t"||kwaicdn.com^",\n\t\t"||kwaizt.com^",\n\t\t"||toutiao.com^",/g' ./internal/filtering/servicelist.go
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+      - name: Set up Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: "${{ env.NODE_VERSION }}"
+      - name: Set up Go modules cache
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: "${{ runner.os }}-go-${{ hashFiles('go.sum') }}"
+          restore-keys: "${{ runner.os }}-go-"
+      - name: Get npm cache directory
+        id: npm-cache
+        run: 'echo "::set-output name=dir::$(npm config get cache)"'
+      - name: Set up npm cache
+        uses: actions/cache@v2
+        with:
+          path: "${{ steps.npm-cache.outputs.dir }}"
+          key: "${{ runner.os }}-node-${{ hashFiles('client/package-lock.json') }}"
+          restore-keys: "${{ runner.os }}-node-"
+      - name: Set up Snapcraft
+        run: >-
+          sudo apt-get -yq --no-install-suggests --no-install-recommends install
+          snapcraft
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Run snapshot build
+        run: make SIGN=0 VERBOSE=1 build-release build-docker
+      - name: Run After Build
+        id: run_after_build
+        run: |
+          sed -i 's/https:\/\/static.adtidy.org\/adguardhome\/development\//https:\/\/github.com\/archiveduser\/adguardhome-build\/releases\/download\/${{ env.REPO_BRANCH }}\//g' ./dist/version.json
+          echo "version_file_content=$(cat ./dist/version.json | base64 -w 0)" >> $GITHUB_OUTPUT
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: "Modify And Build AdguardHome [${{ env.REPO_BRANCH }}](https://github.com/AdguardTeam/AdGuardHome/releases/tag/${{ env.REPO_BRANCH }})"
+          tag_name: ${{ env.REPO_BRANCH }}
+          files: |
+            ./dist/*.zip
+            ./dist/*.tar.gz
+            ./dist/*.txt
+            ./dist/*.json
+
+  update-repo:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: build-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Update Version File
+        run: |
+          echo ${{needs.build-release.outputs.version_file_content}}
+          echo ${{needs.build-release.outputs.version_file_content}} | base64 -d > version.json
+      - name: Commit And Push
+        uses: actions-js/push@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          message: "Build ${{ needs.build-release.outputs.version }}"
