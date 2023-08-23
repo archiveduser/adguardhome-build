@@ -60,6 +60,7 @@ jobs:
           BUILD_VERSION: ${{ env.REPO_BRANCH }}
         run: |
           sed -i 's/v0.0.0/${{ env.REPO_BRANCH }}/g' ./Makefile
+          sed -i 's/CHANNEL = development/CHANNEL = release/g' ./Makefile
           sed -i 's/Host: "static.adtidy.org",/Host: "github.com",/g' ./internal/updater/updater.go
           sed -i 's/Path: path.Join("adguardhome", conf.Channel, "version.json"),/Path: path.Join("archiveduser", "adguardhome-build", "raw", "main", "version.json"),/g' ./internal/updater/updater.go
           sed -i 's/Name:    "TikTok",/Name:    "ByteDance",/g' ./internal/filtering/servicelist.go
