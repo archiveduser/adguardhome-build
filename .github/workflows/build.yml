@@ -101,7 +101,7 @@ jobs:
       - name: Run After Build
         id: run_after_build
         run: |
-          sed -i 's/https:\/\/static.adtidy.org\/adguardhome\/development\//https:\/\/cdn.jsdelivr.net\/gh\/archiveduser\/adguardhome-build@${{ env.REPO_BRANCH }}\//g' ./dist/version.json
+          sed -i 's/https:\/\/static.adtidy.org\/adguardhome\/release\//https:\/\/cdn.jsdelivr.net\/gh\/archiveduser\/adguardhome-build@${{ env.REPO_BRANCH }}\//g' ./dist/version.json
           echo "version_file_content=$(cat ./dist/version.json | base64 -w 0)" >> $GITHUB_OUTPUT
       - name: Create Release
         uses: softprops/action-gh-release@v1
